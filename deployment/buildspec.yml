@@ -1,0 +1,69 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "=========================================="
+      - echo "AWS CodeBuild - DMS"
+      - echo "=========================================="
+      - echo "Environment - ${ENVIRONMENT}"
+      - echo "Project - ${PROJECT_NAME}"
+      - echo "Git Tag - ${GIT_TAG}"
+      - echo "Frontend Tag - ${FRONTEND_TAG}"
+      - echo "Backend Tag - ${BACKEND_TAG}"
+      - echo "=========================================="
+
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+
+      - echo "AWS Account - ${AWS_ACCOUNT_ID}"
+      - echo "ECR Registry - ${ECR_REGISTRY}"
+
+      - aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+      - echo "ECR login successful"
+
+      - echo "Downloading frontend environment file from S3..."
+      - aws s3 cp "s3://${S3_ENV_BUCKET}/${FRONTEND_SECRET_KEY}" ./client/.env
+      - test -s ./client/.env
+      - echo "Frontend environment file downloaded successfully"
+
+  build:
+    commands:
+      - echo "=========================================="
+      - echo "Building Frontend Image"
+      - echo "=========================================="
+
+      - docker build -t ${ECR_REGISTRY}/${PROJECT_NAME}-frontend:${FRONTEND_TAG} ./client
+
+      - echo "=========================================="
+      - echo "Building Backend Image"
+      - echo "=========================================="
+
+      - docker build -t ${ECR_REGISTRY}/${PROJECT_NAME}-backend:${BACKEND_TAG} ./server
+
+  post_build:
+    commands:
+      - echo "=========================================="
+      - echo "Pushing Frontend Image"
+      - echo "=========================================="
+
+      - docker push ${ECR_REGISTRY}/${PROJECT_NAME}-frontend:${FRONTEND_TAG}
+
+      - echo "=========================================="
+      - echo "Pushing Backend Image"
+      - echo "=========================================="
+
+      - docker push ${ECR_REGISTRY}/${PROJECT_NAME}-backend:${BACKEND_TAG}
+
+      - echo "=========================================="
+      - echo "Removing frontend environment file"
+      - echo "=========================================="
+
+      - rm -f ./client/.env
+
+      - echo "=========================================="
+      - echo "CodeBuild Completed"
+      - echo "=========================================="
+      - echo "Frontend image - ${ECR_REGISTRY}/${PROJECT_NAME}-frontend:${FRONTEND_TAG}"
+      - echo "Backend image - ${ECR_REGISTRY}/${PROJECT_NAME}-backend:${BACKEND_TAG}"
